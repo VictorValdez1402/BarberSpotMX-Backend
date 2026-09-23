@@ -1,63 +1,52 @@
 from typing import Optional, List
-from decimal import Decimal
-from datetime import time
-from pydantic import BaseModel, Field, field_validator
-from app.models import DayOfWeekEnum, SubscriptionStatusEnum
+from datetime import datetime
+from pydantic import BaseModel
 
 
-class ScheduleItem(BaseModel):
-    day_of_week: DayOfWeekEnum
-    is_closed: bool = False
-    open_time: Optional[time] = None
-    close_time: Optional[time] = None
-
-
-class BarbershopCreate(BaseModel):
-    name: str = Field(..., min_length=2, max_length=150)
-    bio: Optional[str] = None
-    years_in_service: int = Field(0, ge=0)
-    phone: str = Field(..., min_length=10, max_length=20)
-    latitude: float = Field(..., ge=-90, le=90, description="Ubicación obligatoria")
-    longitude: float = Field(..., ge=-180, le=180, description="Ubicación obligatoria")
-    address_text: Optional[str] = None
-    base_cut_price: Decimal = Field(..., gt=0, description="Precio obligatorio del corte base")
-    schedules: List[ScheduleItem] = []
-
-    @field_validator("bio")
-    @classmethod
-    def validate_bio_word_count(cls, v: Optional[str]):
-        if v:
-            words = v.strip().split()
-            if len(words) > 500:
-                raise ValueError(f"La descripción excede el límite de 500 palabras (palabras actuales: {len(words)})")
-        return v
-
-
-class BarbershopPackageItem(BaseModel):
-    title: str = Field(..., max_length=120)
+class BarbershopBase(BaseModel):
+    name: str
     description: Optional[str] = None
-    price: Decimal = Field(..., gt=0)
+    address: str
+    phone: Optional[str] = None
+    instagram_url: Optional[str] = None
+    tiktok_url: Optional[str] = None
+    facebook_url: Optional[str] = None
+    website_url: Optional[str] = None
+    latitude: float
+    longitude: float
 
 
-class AddBarberToShopRequest(BaseModel):
-    user_id: int
-    first_name: str
-    last_name: str
-    stage_name: str
-    age: int
-    phone: str
-    bio: Optional[str] = None
+class BarbershopCreate(BarbershopBase):
+    pass
 
 
-class BarbershopResponse(BaseModel):
+class BarbershopSocialsUpdate(BaseModel):
+    instagram_url: Optional[str] = None
+    tiktok_url: Optional[str] = None
+    facebook_url: Optional[str] = None
+    website_url: Optional[str] = None
+
+
+class BarbershopUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    address: Optional[str] = None
+    phone: Optional[str] = None
+    instagram_url: Optional[str] = None
+    tiktok_url: Optional[str] = None
+    facebook_url: Optional[str] = None
+    website_url: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+
+
+class BarbershopResponse(BarbershopBase):
     id: int
     owner_id: int
-    name: str
-    bio: Optional[str]
-    years_in_service: int
-    phone: str
-    allowed_barbers_count: int
-    subscription_status: SubscriptionStatusEnum
+    max_barbers: int
+    is_verified: bool
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

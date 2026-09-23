@@ -1,84 +1,125 @@
+from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from geoalchemy2.elements import WKTElement
+
 from app.database import get_db
-from app.models import Barber, ServiceCatalog, PackageCatalog, User, RoleEnum
+from app.models import User, BarberProfile, UserRole, Barbershop
 from app.schemas.barbers import (
-    BarberProfileCreate,
-    BarberProfileResponse,
-    BarberPackageItem
+    BarberCreate,
+    BarberUpdate,
+    BarberSocialsUpdate,
+    BarberResponse
 )
+from app.utils.security import get_current_active_user
 
-router = APIRouter(prefix="/api/v1/barbers", tags=["Barberos Independientes"])
-
-
-@router.post("/profile/{user_id}", response_model=BarberProfileResponse, status_code=status.HTTP_201_CREATED)
-def create_barber_profile(user_id: int, payload: BarberProfileCreate, db: Session = Depends(get_db)):
-    # 1. Validar existencia del usuario y su rol
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="Usuario no encontrado")
-    if user.role != RoleEnum.INDEPENDENT_BARBER:
-        raise HTTPException(status_code=400, detail="El rol del usuario debe ser INDEPENDENT_BARBER")
-
-    # 2. Evitar perfiles duplicados
-    existing_barber = db.query(Barber).filter(Barber.user_id == user_id).first()
-    if existing_barber:
-        raise HTTPException(status_code=400, detail="El perfil del barbero ya existe")
-
-    # 3. Formatear coordenadas geográficas para PostGIS (WGS 84) si se indicaron
-    location_geom = None
-    if payload.longitude is not None and payload.latitude is not None:
-        location_geom = WKTElement(f"POINT({payload.longitude} {payload.latitude})", srid=4326)
-
-    # 4. Crear entidad Barbero
-    new_barber = Barber(
-        user_id=user_id,
-        first_name=payload.first_name,
-        last_name=payload.last_name,
-        stage_name=payload.stage_name,
-        age=payload.age,
-        phone=payload.phone,
-        bio=payload.bio,
-        location=location_geom
-    )
-    db.add(new_barber)
-    db.flush()
-
-    # 5. Insertar precio obligatorio del corte base
-    base_cut = ServiceCatalog(
-        barber_id=new_barber.id,
-        service_name="Corte",
-        price=payload.base_cut_price,
-        is_base_cut=True
-    )
-    db.add(base_cut)
-
-    db.commit()
-    db.refresh(new_barber)
-    return new_barber
+router = APIRouter(prefix="/barbers", tags=["Barbers"])
 
 
-@router.post("/{barber_id}/packages", status_code=status.HTTP_201_CREATED)
-def add_package(barber_id: int, payload: BarberPackageItem, db: Session = Depends(get_db)):
-    barber = db.query(Barber).filter(Barber.id == barber_id).first()
-    if not barber:
-        raise HTTPException(status_code=404, detail="Barbero no encontrado")
-
-    # Validar límite de negocio: Máximo 3 paquetes para independientes
-    current_packages = db.query(PackageCatalog).filter(PackageCatalog.barber_id == barber_id).count()
-    if current_packages >= 3:
+@router.post("/", response_model=BarberResponse, status_code=status.HTTP_201_CREATED)
+def create_barber_profile(
+    barber_in: BarberCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    existing = db.query(BarberProfile).filter(BarberProfile.user_id == current_user.id).first()
+    if existing:
         raise HTTPException(
-            status_code=400,
-            detail="Los barberos independientes solo pueden agregar hasta 3 paquetes o combos"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El usuario ya tiene un perfil de barbero asignado"
         )
 
-    package = PackageCatalog(
-        barber_id=barber_id,
-        title=payload.title,
-        description=payload.description,
-        price=payload.price
+    location_geom = None
+    if barber_in.latitude is not None and barber_in.longitude is not None:
+        location_geom = WKTElement(f"POINT({barber_in.longitude} {barber_in.latitude})", srid=4326)
+
+    barber = BarberProfile(
+        user_id=current_user.id,
+        barbershop_id=barber_in.barbershop_id,
+        bio=barber_in.bio,
+        years_of_experience=barber_in.years_of_experience,
+        specialties=barber_in.specialties,
+        instagram_url=barber_in.instagram_url,
+        tiktok_url=barber_in.tiktok_url,
+        facebook_url=barber_in.facebook_url,
+        website_url=barber_in.website_url,
+        is_independent=barber_in.is_independent,
+        is_available=barber_in.is_available,
+        latitude=barber_in.latitude,
+        longitude=barber_in.longitude,
+        location=location_geom
     )
-    db.add(package)
+
+    db.add(barber)
     db.commit()
-    return {"message": "Paquete agregado con éxito"}
+    db.refresh(barber)
+    return barber
+
+
+@router.get("/me", response_model=BarberResponse)
+def get_my_barber_profile(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    barber = db.query(BarberProfile).filter(BarberProfile.user_id == current_user.id).first()
+    if not barber:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Perfil de barbero no encontrado")
+    return barber
+
+
+@router.patch("/me/socials", response_model=BarberResponse)
+def update_my_socials(
+    socials: BarberSocialsUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    barber = db.query(BarberProfile).filter(BarberProfile.user_id == current_user.id).first()
+    if not barber:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Perfil de barbero no encontrado")
+
+    update_data = socials.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(barber, field, value)
+
+    db.commit()
+    db.refresh(barber)
+    return barber
+
+
+@router.patch("/me", response_model=BarberResponse)
+def update_my_profile(
+    barber_update: BarberUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    barber = db.query(BarberProfile).filter(BarberProfile.user_id == current_user.id).first()
+    if not barber:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Perfil de barbero no encontrado")
+
+    update_data = barber_update.model_dump(exclude_unset=True)
+
+    lat = update_data.get("latitude", barber.latitude)
+    lon = update_data.get("longitude", barber.longitude)
+    if "latitude" in update_data or "longitude" in update_data:
+        if lat is not None and lon is not None:
+            barber.location = WKTElement(f"POINT({lon} {lat})", srid=4326)
+
+    for field, value in update_data.items():
+        setattr(barber, field, value)
+
+    db.commit()
+    db.refresh(barber)
+    return barber
+
+
+@router.get("/{barber_id}", response_model=BarberResponse)
+def get_barber_by_id(barber_id: int, db: Session = Depends(get_db)):
+    barber = db.query(BarberProfile).filter(BarberProfile.id == barber_id).first()
+    if not barber:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Barbero no encontrado")
+    return barber
+
+
+@router.get("/", response_model=List[BarberResponse])
+def list_barbers(skip: int = 0, limit: int = 20, db: Session = Depends(get_db)):
+    return db.query(BarberProfile).offset(skip).limit(limit).all()
