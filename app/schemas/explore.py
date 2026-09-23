@@ -4,7 +4,7 @@ from pydantic import BaseModel
 
 class NearbyResultItem(BaseModel):
     id: int
-    entity_type: str  # "BARBER" o "BARBERSHOP"
+    entity_type: str
     name: str
     phone: Optional[str] = None
     avatar_url: Optional[str] = None
