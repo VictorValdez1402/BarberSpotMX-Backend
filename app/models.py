@@ -16,11 +16,20 @@ from geoalchemy2 import Geometry
 from app.database import Base
 
 
+# --- ENUMS Y ALIAS DE COMPATIBILIDAD ---
 class UserRole(str, enum.Enum):
     CLIENT = "client"
     BARBER = "barber"
     BARBERSHOP_OWNER = "barbershop_owner"
     ADMIN = "admin"
+
+RoleEnum = UserRole
+
+
+class VerificationStatusEnum(str, enum.Enum):
+    PENDING = "PENDING"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
 
 
 class SubscriptionTier(str, enum.Enum):
@@ -35,7 +44,10 @@ class SubscriptionStatus(str, enum.Enum):
     CANCELED = "canceled"
     TRIALING = "trialing"
 
+SubscriptionStatusEnum = SubscriptionStatus
 
+
+# --- MODELOS ---
 class User(Base):
     __tablename__ = "users"
 
@@ -111,6 +123,10 @@ class BarberProfile(Base):
     user = relationship("User", back_populates="barber_profile")
     barbershop = relationship("Barbershop", back_populates="barbers")
     awards = relationship("BarberAward", back_populates="barber")
+    portfolio_images = relationship("BarberPortfolioImage", back_populates="barber")
+
+# Alias de compatibilidad para routers antiguos
+Barber = BarberProfile
 
 
 class BarberAward(Base):
@@ -125,6 +141,18 @@ class BarberAward(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     barber = relationship("BarberProfile", back_populates="awards")
+
+
+class BarberPortfolioImage(Base):
+    __tablename__ = "barber_portfolio_images"
+
+    id = Column(Integer, primary_key=True, index=True)
+    barber_id = Column(Integer, ForeignKey("barber_profiles.id"), nullable=False)
+    image_url = Column(String(500), nullable=False)
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    barber = relationship("BarberProfile", back_populates="portfolio_images")
 
 
 class Subscription(Base):
