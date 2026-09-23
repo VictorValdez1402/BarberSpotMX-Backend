@@ -17,7 +17,7 @@ def get_nearby_places(
 ):
     radius_meters = radius_km * 1000.0
 
-    # 1. Consulta espacial para Barberos Independientes (con filtro de suscripción)
+    # 1. Consulta espacial para Barberos Independientes
     barbers_query = text("""
         SELECT 
             b.id,
@@ -25,6 +25,8 @@ def get_nearby_places(
             b.phone,
             b.avatar_url,
             b.approved_medals_count,
+            ST_Y(b.location::geometry) AS latitude,
+            ST_X(b.location::geometry) AS longitude,
             ROUND((ST_Distance(b.location::geography, ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography) / 1000.0)::numeric, 2) AS distance_km,
             s.price AS base_cut_price
         FROM barbers b
@@ -44,14 +46,17 @@ def get_nearby_places(
         }
     ).mappings().all()
 
-    # 2. Consulta espacial para Barberías (con filtro de suscripción)
+    # 2. Consulta espacial para Barberías
     shops_query = text("""
         SELECT 
             s.id,
             s.name,
             s.phone,
             s.avatar_url,
+            s.address_text,
             s.years_in_service,
+            ST_Y(s.location::geometry) AS latitude,
+            ST_X(s.location::geometry) AS longitude,
             ROUND((ST_Distance(s.location::geography, ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography) / 1000.0)::numeric, 2) AS distance_km,
             sc.price AS base_cut_price
         FROM barbershops s
@@ -83,7 +88,10 @@ def get_nearby_places(
                 avatar_url=row["avatar_url"],
                 distance_km=float(row["distance_km"]),
                 base_cut_price=row["base_cut_price"],
-                approved_medals_count=row["approved_medals_count"]
+                approved_medals_count=row["approved_medals_count"],
+                address_text=None,
+                latitude=float(row["latitude"]) if row["latitude"] is not None else None,
+                longitude=float(row["longitude"]) if row["longitude"] is not None else None
             )
         )
 
@@ -97,7 +105,10 @@ def get_nearby_places(
                 avatar_url=row["avatar_url"],
                 distance_km=float(row["distance_km"]),
                 base_cut_price=row["base_cut_price"],
-                years_in_service=row["years_in_service"]
+                years_in_service=row["years_in_service"],
+                address_text=row["address_text"],
+                latitude=float(row["latitude"]) if row["latitude"] is not None else None,
+                longitude=float(row["longitude"]) if row["longitude"] is not None else None
             )
         )
 
