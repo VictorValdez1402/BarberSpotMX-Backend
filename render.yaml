@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: groomgrid-api
+    name: barberspotmx-api
     runtime: docker
     plan: free
     region: oregon

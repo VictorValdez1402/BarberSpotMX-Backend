@@ -8,7 +8,7 @@ from app.routers import auth, barbers, barbershops, explore, awards, subscriptio
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
-    title="GroomGrid API",
+    title="BarberSpotMX API",
     description="Backend API para la plataforma SaaS de barberos y barberías en México",
     version="1.0.0"
 )
@@ -31,7 +31,7 @@ app.include_router(subscriptions.router)
 @app.get("/")
 def read_root():
     return {
-        "project": "GroomGrid API",
+        "project": "BarberSpotMX API",
         "status": "online",
         "version": "1.0.0"
     }
